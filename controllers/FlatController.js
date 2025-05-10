@@ -116,7 +116,7 @@ exports.addFlat = async (req, res) => {
 // Controller to get all flats using aggregation, filtering, sorting, pagination
 exports.getAllFlats = async (req, res) => {
   try {
-    const { page = 1, limit = 10, sort, ...filters } = req.query;
+    const { page = 1, limit = 100000, sort, ...filters } = req.query;
 
     const pipeline = [];
 
@@ -348,6 +348,11 @@ exports.deleteFlat = async (req, res) => {
 // Middleware for adding a flat to logged-in users favorites
 exports.addToFavorites = async (req, res) => {
   try {
+    // Accept POST without Body
+    if (req.headers['content-length'] === '0') {
+      req.body = {};
+    }
+
     const userId = req.currentUser._id;
     const flatId = req.params.flatId;
 
@@ -387,6 +392,11 @@ exports.addToFavorites = async (req, res) => {
 // Middleware for removing a flat from favorites
 exports.removeFromFavorites = async (req, res) => {
   try {
+    // Accept POST without Body
+    if (req.headers['content-length'] === '0') {
+      req.body = {};
+    }
+
     const userId = req.currentUser._id;
     const flatId = req.params.flatId;
 

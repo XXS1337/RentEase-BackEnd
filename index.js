@@ -2,7 +2,6 @@ const express = require('express');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const mongoose = require('mongoose');
-// const cookieParser = require('cookie-parser'); // For JWT cookies
 const userRoutes = require('./routes/UserRoutes');
 const flatRoutes = require('./routes/FlatRoutes');
 const messageRoutes = require('./routes/MessageRoutes');
@@ -14,12 +13,9 @@ const allowedOrigins = [process.env.ALLOWED_ORIGIN_1, process.env.ALLOWED_ORIGIN
 const corsOptions = {
   origin: allowedOrigins,
   optionsSuccessStatus: 200,
-  credentials: true, // Required for using cookies/auth headers
 };
 app.use(cors(corsOptions));
 app.use(express.json());
-
-// app.use(cookieParser()); // Enable cookie parsing
 
 dotenv.config();
 const port = process.env.PORT || 5001;
