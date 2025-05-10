@@ -114,3 +114,36 @@ exports.deleteUserById = async (req, res) => {
     return res.status(500).json({ status: 'failed', message: 'Error deleting user', error: error.message });
   }
 };
+
+// Middleware to get how many flats has each user
+exports.getUsersFlatCount = async (req, res) => {
+  try {
+    // 1. Retrieve all users with basic fields
+    const users = await User.find({}, 'firstName lastName email role').lean();
+
+    // 2. For each user, count the number of flats they own
+    const result = await Promise.all(
+      users.map(async (user) => {
+        const flatCount = await Flat.countDocuments({ owner: user._id });
+        return {
+          ...user,
+          flatCount,
+        };
+      })
+    );
+
+    // 3. Return the list of users with flat count
+    res.status(200).json({
+      status: 'success',
+      count: result.length,
+      data: result,
+    });
+  } catch (error) {
+    console.error('Error fetching users with flat count:', error);
+    res.status(500).json({
+      status: 'failed',
+      message: 'Error fetching users with flat count',
+      error: error.message,
+    });
+  }
+};

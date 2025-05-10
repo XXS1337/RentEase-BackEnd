@@ -5,7 +5,7 @@ const adminController = require('./../controllers/AdminController');
 
 // Regular user routes (authController)
 router.post('/register', authController.register);
-router.get('/check-email', authController.checkEmail);
+router.post('/checkEmail', authController.checkEmail);
 router.post('/login', authController.login);
 router.post('/forgotPassword', authController.forgotPassword);
 router.patch('/resetPassword/:token', authController.resetPassword);
@@ -18,5 +18,6 @@ router.get('/allUsers', authController.protect, authController.restrictIfNotAdmi
 router.patch('/editProfile/:id', authController.protect, authController.restrictIfNotAdmin, adminController.editUserById);
 router.patch('/updateRole/:id', authController.protect, authController.restrictIfNotAdmin, adminController.updateRole);
 router.delete('/deleteProfile/:id', authController.protect, authController.restrictIfNotAdmin, adminController.deleteUserById);
+router.get('/usersFlatCount', authController.protect, authController.restrictIfNotAdmin, adminController.getUsersFlatCount);
 
 module.exports = router;
