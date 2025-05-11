@@ -51,69 +51,7 @@ exports.addFlat = async (req, res) => {
   }
 };
 
-// Middleware to get all flats from the database
-// exports.getAllFlats = async (req, res) => {
-//   try {
-//     const { city, minPrice, maxPrice, minArea, maxArea, sort, page = 1, limit = 10 } = req.query;
-
-//     const filter = {};
-
-//     // City filter (partial + case-insensitive)
-//     if (city) {
-//       filter.city = new RegExp(city, 'i'); // Case-insensitive regex for partial match
-//     }
-
-//     // Price range filter
-//     if (minPrice || maxPrice) {
-//       filter.rentPrice = {};
-//       if (minPrice) filter.rentPrice.$gte = Number(minPrice);
-//       if (maxPrice) filter.rentPrice.$lte = Number(maxPrice);
-//     }
-
-//     // Area size filter
-//     if (minArea || maxArea) {
-//       filter.areaSize = {};
-//       if (minArea) filter.areaSize.$gte = Number(minArea);
-//       if (maxArea) filter.areaSize.$lte = Number(maxArea);
-//     }
-
-//     // Sort options
-//     let sortOption = {};
-//     if (sort) {
-//       const sortFields = sort.split(',');
-//       sortFields.forEach((field) => {
-//         const [key, order] = field.split(':');
-//         sortOption[key] = order === 'desc' ? -1 : 1;
-//       });
-//     } else {
-//       sortOption = { createdAt: -1 };
-//     }
-
-//     // Pagination
-//     const pageNumber = Number(page);
-//     const limitNumber = Number(limit);
-//     const skip = (pageNumber - 1) * limitNumber;
-
-//     // Query execution
-//     const flats = await Flat.find(filter).sort(sortOption).skip(skip).limit(limitNumber).populate('owner', 'name email');
-
-//     const totalCount = await Flat.countDocuments(filter);
-
-//     res.status(200).json({
-//       status: 'success',
-//       page: pageNumber,
-//       limit: limitNumber,
-//       totalCount,
-//       count: flats.length,
-//       data: flats,
-//     });
-//   } catch (error) {
-//     //  Handle any server errors
-//     res.status(500).json({ status: 'failed', message: 'Error getting all flats' });
-//   }
-// };
-
-// Controller to get all flats using aggregation, filtering, sorting, pagination
+// Middleware to get all flats using aggregation, filtering, sorting, pagination
 exports.getAllFlats = async (req, res) => {
   try {
     const { page = 1, limit = 100000, sort, ...filters } = req.query;
@@ -254,46 +192,45 @@ exports.updateFlat = async (req, res) => {
       return res.status(404).json({ status: 'failed', message: 'Flat not found' });
     }
 
-    // 3. Ensure the user is the owner of the flat (only the owner can update it)
+    // 3. Ensure the user is the owner of the flat
     if (flat.owner.toString() !== userId.toString()) {
       return res.status(403).json({ status: 'failed', message: 'You can only update your own flats' });
     }
 
-    // 4. Handle image update if a new image is uploaded
-    // If the user has uploaded a new image, delete the old one from Cloudinary first
+    // 4. Handle image update
     if (req.file) {
       if (flat.image && flat.image.public_id) {
-        await cloudinary.uploader.destroy(flat.image.public_id); // Remove the old image from Cloudinary
+        await cloudinary.uploader.destroy(flat.image.public_id);
       }
 
-      // Add the new image to the flat object with Cloudinary URL and public ID
       flat.image = {
-        url: req.file.path, // New image URL from the request
-        public_id: req.file.filename, // Cloudinary's public ID for the image
+        url: req.file.path,
+        public_id: req.file.filename,
       };
     }
 
-    // 5. Update other fields from the request body
-    // We update all fields from the request body except for 'flatId' and 'image' fields
+    // 5. Update the rest of the fields
+    const numberFields = ['areaSize', 'yearBuilt', 'rentPrice', 'streetNumber'];
     Object.entries(req.body).forEach(([key, value]) => {
       if (key !== 'flatId' && key !== 'image') {
-        flat[key] = value;
+        flat[key] = numberFields.includes(key) ? Number(value) : value;
       }
     });
 
-    // 6. Save the changes to the flat
+    // 6. Save changes
     await flat.save();
 
-    // 7. Return a success response with the updated flat data
-    res.status(200).json({ status: 'success', message: 'Flat updated successfully', data: flat });
+    res.status(200).json({
+      status: 'success',
+      message: 'Flat updated successfully',
+      data: flat,
+    });
   } catch (error) {
-    // Handle any validation errors
     if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map((err) => err.message); // Extract error messages for each field
-      return res.status(400).json({ status: 'failed', message: errors.join(', ') }); // Send detailed error messages
+      const errors = Object.values(error.errors).map((err) => err.message);
+      return res.status(400).json({ status: 'failed', message: errors.join(', ') });
     }
 
-    //  Handle any server errors
     res.status(500).json({ status: 'failed', message: 'Error updating flat' });
   }
 };
@@ -342,6 +279,20 @@ exports.deleteFlat = async (req, res) => {
   } catch (error) {
     console.error('Error deleting flat:', error);
     res.status(500).json({ status: 'failed', message: 'Error deleting flat' });
+  }
+};
+
+// Middleware to get the logged-in user's flats
+exports.getMyFlats = async (req, res) => {
+  try {
+    const userId = req.currentUser._id;
+
+    const flats = await Flat.find({ owner: userId }).sort({ createdAt: -1 });
+
+    return res.status(200).json({ status: 'success', count: flats.length, data: flats });
+  } catch (error) {
+    console.error('Error fetching user flats:', error);
+    return res.status(500).json({ status: 'failed', message: 'Error fetching your flats' });
   }
 };
 

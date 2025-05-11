@@ -9,7 +9,4 @@ router.post('/:flatId/messages', authController.protect, messageController.addMe
 // Route to get all messages for a specific flat (accessible by the flat owner)
 router.get('/:flatId/messages', authController.protect, messageController.getAllMessages);
 
-// Route to get messages between a specific flat owner and a specific sender (flat owner can filter by sender)
-router.get('/:flatId/messages/:senderId', authController.protect, messageController.getUserMessages);
-
 module.exports = router;

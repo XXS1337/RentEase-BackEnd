@@ -8,66 +8,22 @@ exports.addMessage = async (req, res) => {
     const senderId = req.currentUser._id;
     const { content } = req.body;
 
-    // 1. Check if flat exists
     const flat = await Flat.findById(flatId);
     if (!flat) {
       return res.status(404).json({ status: 'failed', message: 'Flat not found' });
     }
 
-    // 2. Create the message document
-    const message = await Message.create({
-      content,
-      flatId,
-      senderId,
-    });
+    // 🚫 Prevent owner from sending messages to themselves
+    if (flat.owner.toString() === senderId.toString()) {
+      return res.status(403).json({ status: 'failed', message: 'Owners cannot send messages to their own flats' });
+    }
 
-    // 3. Push message ID to flat's messages array
-    flat.messages.push(message._id);
-    await flat.save();
+    const message = await Message.create({ content, flatId, senderId });
 
-    return res.status(201).json({ status: 'success', message: 'Message sent successfully', data: message });
+    res.status(201).json({ status: 'success', data: message });
   } catch (error) {
-    //  Handle any server errors
-    res.status(500).json({ status: 'failed', message: 'Error sending message' });
-  }
-};
-
-// Middleware to get messages between a specific flat owner and a specific sender (flat owner can filter by sender)
-exports.getUserMessages = async (req, res) => {
-  try {
-    const flatId = req.params.flatId;
-    const senderId = req.params.senderId;
-    const userId = req.currentUser._id;
-
-    // 1. Check if flat exists
-    const flat = await Flat.findById(flatId);
-
-    if (!flat) {
-      return res.status(404).json({ status: 'failed', message: 'Flat not found' });
-    }
-
-    // 2. Check if the current user is the owner of the flat
-    if (flat.owner.toString() !== userId.toString()) {
-      return res.status(403).json({ status: 'failed', message: 'You can only view messages for your own flats' });
-    }
-
-    // 3. Populate the 'messages' field with message data, filtered by the senderId
-    const populatedFlat = await Flat.findById(flatId).populate({
-      path: 'messages',
-      match: { senderId: senderId }, // Filter messages by senderId
-      select: 'content senderId createdAt', // Only select relevant fields
-    });
-
-    // 4. If no messages are found from the specified sender, return an empty array
-    if (!populatedFlat.messages) {
-      return res.status(200).json({ status: 'success', data: [] });
-    }
-
-    // 5. Return the filtered messages from the specified sender
-    return res.status(200).json({ status: 'success', data: populatedFlat.messages });
-  } catch (error) {
-    //  Handle any server errors
-    return res.status(500).json({ status: 'failed', message: 'Error fetching user messages' });
+    console.error('Error adding message:', error);
+    res.status(500).json({ status: 'failed', message: 'Server error while sending message' });
   }
 };
 
@@ -77,27 +33,42 @@ exports.getAllMessages = async (req, res) => {
     const flatId = req.params.flatId;
     const userId = req.currentUser._id;
 
-    // 1. Find the flat to check if the user is the owner of the flat
     const flat = await Flat.findById(flatId);
     if (!flat) {
       return res.status(404).json({ status: 'failed', message: 'Flat not found' });
     }
 
-    // 2  Check if the current user is the owner of the flat
-    if (flat.owner.toString() !== userId.toString()) {
-      return res.status(403).json({ status: 'failed', message: 'You can only view messages for your own flats' });
+    const isOwner = flat.owner.toString() === userId.toString();
+    const userCanMessage = true;
+
+    let messages = [];
+
+    if (isOwner) {
+      messages = await Message.find({ flatId }).sort({ createdAt: 1 }).populate('senderId', 'firstName lastName email');
+    } else {
+      messages = await Message.find({ flatId, senderId: userId }).sort({ createdAt: 1 }).populate('senderId', 'firstName lastName email');
     }
 
-    // 3. Populate the 'messages' field with the full details of each message (e.g., content, senderId, createdAt)
-    const populatedFlat = await Flat.findById(flatId).populate({
-      path: 'messages',
-      select: 'content senderId createdAt',
-    });
+    const formattedMessages = messages.map((msg) => ({
+      _id: msg._id,
+      flatId: msg.flatId,
+      senderId: msg.senderId._id,
+      content: msg.content,
+      createdAt: msg.createdAt,
+      senderName: `${msg.senderId.firstName} ${msg.senderId.lastName}`,
+      senderEmail: msg.senderId.email,
+    }));
 
-    // 4. Return the populated messages for the flat
-    return res.status(200).json({ status: 'success', data: populatedFlat.messages });
+    return res.status(200).json({
+      status: 'success',
+      data: formattedMessages,
+      meta: {
+        isOwner,
+        userCanMessage,
+      },
+    });
   } catch (error) {
-    //  Handle any server errors
+    console.error('Error fetching messages:', error);
     return res.status(500).json({ status: 'failed', message: 'Error fetching messages' });
   }
 };

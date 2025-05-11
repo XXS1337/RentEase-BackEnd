@@ -8,6 +8,7 @@ const flatController = require('./../controllers/FlatController');
 
 router.get('/', flatController.getAllFlats);
 router.post('/', authController.protect, upload.single('image'), flatController.addFlat);
+router.get('/myFlats', authController.protect, flatController.getMyFlats);
 router.delete('/:flatId', authController.protect, flatController.deleteFlat);
 router.get('/:flatId', authController.protect, flatController.getFlatById);
 router.patch('/:flatId', authController.protect, upload.single('image'), flatController.updateFlat);
