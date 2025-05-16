@@ -296,15 +296,6 @@ exports.updateProfile = async (req, res) => {
       switch (field) {
         // Handle password update
         case 'newPassword':
-          if (!req.body.oldPassword) {
-            return res.status(400).json({ status: 'failed', message: 'Current password is required to set a new password' });
-          }
-
-          // Verify current password
-          if (!(await user.comparePassword(req.body.oldPassword))) {
-            return res.status(401).json({ status: 'failed', message: 'Current password is incorrect' });
-          }
-
           user.password = req.body.newPassword;
           shouldUpdatePassword = true;
           break;
@@ -321,10 +312,6 @@ exports.updateProfile = async (req, res) => {
             profileUpdates.email = req.body.email;
             shouldUpdateToken = true; // Invalidate old token if email is changed
           }
-          break;
-
-        // Ignore oldPassword field
-        case 'oldPassword':
           break;
 
         // Reject unexpected fields
