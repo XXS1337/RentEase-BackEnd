@@ -90,17 +90,13 @@ exports.login = async (req, res) => {
     // 4) Generate JWT token
     const token = createToken(userDB);
 
-    // 5) Save token to user's document (optional: can be used to invalidate sessions later)
-    userDB.activeToken = token;
-    await userDB.save({ validateBeforeSave: false });
-
-    // 6) Remove password from output
+    // 5) Remove password from output
     userDB.password = undefined;
 
-    // 7) Calculate how many seconds until the token expires
+    // 6) Calculate how many seconds until the token expires
     const expiresInSeconds = jwt.decode(token).exp - Math.floor(Date.now() / 1000);
 
-    // 8) Send response with user data, token and expiration time
+    // 7) Send response with user data, token and expiration time
     return res.status(200).json({ status: 'success', message: 'User logged in successfully', userDB, token, expiresIn: expiresInSeconds });
   } catch (error) {
     //  Handle any server errors
@@ -234,19 +230,13 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ status: 'failed', message: 'User not found' });
     }
 
-    // 4) Ensure the token provided is still the valid active token for the user
-    if (currentUser.activeToken !== token) {
-      // If the token does not match the stored active token, deny access
-      return res.status(401).json({ status: 'failed', message: 'Token is not valid' });
-    }
-
-    // 5) Check if the user's password has changed after the token was issued
+    // 4) Check if the user's password has changed after the token was issued
     if (await currentUser.isPasswordChanged(decodedToken.iat)) {
       // If the password has changed, session has expired, and user needs to log in again
       return res.status(401).json({ status: 'failed', message: 'Session expired. Please login again' });
     }
 
-    // Attach the current user object to the request so it can be accessed by other middlewares/routes
+    // 5) Attach the current user object to the request so it can be accessed by other middlewares/routes
     req.currentUser = currentUser;
 
     // Proceed to the next middleware or route handler

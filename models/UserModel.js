@@ -91,10 +91,6 @@ const userSchema = new mongoose.Schema(
         ref: 'Flat',
       },
     ],
-    activeToken: {
-      type: String,
-      default: undefined,
-    },
     passwordChangedAt: {
       type: Date,
     },

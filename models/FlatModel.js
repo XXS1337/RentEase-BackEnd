@@ -23,14 +23,9 @@ const flatSchema = new mongoose.Schema(
       trim: true,
     },
     streetNumber: {
-      type: String, // Kept as String to handle cases like "10A"
+      type: Number,
       required: [true, 'Street number is required'],
-      validate: {
-        validator: function (v) {
-          return /^[0-9]+[A-Za-z]?$/.test(v);
-        },
-        message: 'Street number must be a valid number or alphanumeric',
-      },
+      min: [1, 'Street number must be a positive number'],
     },
     areaSize: {
       type: Number,
@@ -55,15 +50,18 @@ const flatSchema = new mongoose.Schema(
       min: [0.01, 'Rent price must be greater than zero'],
       index: true, // Index for price range queries and sorting
     },
+    // dateAvailable: {
+    //   type: Date,
+    //   required: [true, 'Date available is required'],
+    //   validate: {
+    //     validator: function (v) {
+    //       return v.setHours(0, 0, 0, 0) >= new Date().setHours(0, 0, 0, 0);
+    //     },
+    //     message: 'Date available must be today or in the future',
+    //   },
     dateAvailable: {
-      type: Date,
+      type: Number, // not Date!
       required: [true, 'Date available is required'],
-      validate: {
-        validator: function (v) {
-          return v.setHours(0, 0, 0, 0) >= new Date().setHours(0, 0, 0, 0);
-        },
-        message: 'Date available must be today or in the future',
-      },
     },
     image: {
       url: { type: String, required: true },

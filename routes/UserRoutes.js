@@ -18,7 +18,6 @@ router.get('/allUsers', authController.protect, authController.restrictIfNotAdmi
 router.patch('/editProfile/:id', authController.protect, authController.restrictIfNotAdmin, adminController.editUserById);
 router.patch('/updateRole/:id', authController.protect, authController.restrictIfNotAdmin, adminController.updateRole);
 router.delete('/deleteProfile/:id', authController.protect, authController.restrictIfNotAdmin, adminController.deleteUserById);
-router.get('/usersFlatCount', authController.protect, authController.restrictIfNotAdmin, adminController.getUsersFlatCount);
 router.get('/getUserById/:id', authController.protect, authController.restrictIfNotAdmin, adminController.getUserById);
 
 module.exports = router;

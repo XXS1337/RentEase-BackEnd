@@ -13,6 +13,10 @@ exports.addFlat = async (req, res) => {
     return res.status(400).json({ status: 'failed', message: 'Image upload failed or missing' });
   }
 
+  console.log('📦 înainte de salvare:', req.body.dateAvailable);
+  req.body.dateAvailable = Number(req.body.dateAvailable);
+  console.log('📦 după conversie (timestamp):', req.body.dateAvailable);
+
   // Prepare full data with image included
   const flatData = {
     ...req.body,
@@ -210,7 +214,7 @@ exports.updateFlat = async (req, res) => {
     }
 
     // 5. Update the rest of the fields
-    const numberFields = ['areaSize', 'yearBuilt', 'rentPrice', 'streetNumber'];
+    const numberFields = ['areaSize', 'yearBuilt', 'rentPrice', 'streetNumber', 'dateAvailable'];
     Object.entries(req.body).forEach(([key, value]) => {
       if (key !== 'flatId' && key !== 'image') {
         flat[key] = numberFields.includes(key) ? Number(value) : value;

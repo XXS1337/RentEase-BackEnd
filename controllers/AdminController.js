@@ -7,16 +7,109 @@ const { v2: cloudinary } = require('cloudinary');
 // Middleware to get all users from the database (admin only)
 exports.getAllUsers = async (req, res) => {
   try {
-    // 1) Find all users in the database
-    const users = await User.find({}).select('-password -activeToken -createdAt -updatedAt -__v');
+    const { page = 1, limit = 100000, sort, ...filters } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
 
-    // 2) Send a success response with the list of users
-    return res.status(200).json({ status: 'success', message: 'Users retrieved successfully', data: users });
+    const matchStage = {};
+
+    // Filter: role
+    if (filters.role) {
+      matchStage.role = filters.role;
+    }
+
+    // Filter: age range (calculated from birthDate)
+    if (filters.age) {
+      const [min, max] = filters.age.split('-').map(Number);
+      const now = new Date();
+      const minDate = new Date(now.getFullYear() - max, now.getMonth(), now.getDate());
+      const maxDate = new Date(now.getFullYear() - min, now.getMonth(), now.getDate());
+      matchStage.birthDate = { $gte: minDate, $lte: maxDate };
+    }
+
+    // Pipeline
+    const pipeline = [
+      { $match: matchStage },
+
+      // Add flats count & age
+      {
+        $addFields: {
+          publishedFlatsCount: { $size: { $ifNull: ['$addedFlats', []] } },
+          age: {
+            $dateDiff: {
+              startDate: '$birthDate',
+              endDate: '$$NOW',
+              unit: 'year',
+            },
+          },
+        },
+      },
+
+      // Filter: publishedFlatsCount
+      ...(filters.flatsCount
+        ? (() => {
+            const [min, max] = filters.flatsCount.split('-').map(Number);
+            return [{
+              $match: {
+                publishedFlatsCount: { $gte: min, $lte: max },
+              },
+            }];
+          })()
+        : []),
+
+      // Sort
+      (() => {
+        if (!sort) return { $sort: { createdAt: -1 } };
+        const sortObj = {};
+        const fields = sort.split(',');
+        for (const field of fields) {
+          const dir = field.startsWith('-') ? -1 : 1;
+          const name = field.replace('-', '');
+          sortObj[name] = dir;
+        }
+        return { $sort: sortObj };
+      })(),
+
+      { $skip: skip },
+      { $limit: Number(limit) },
+
+      // Project only needed fields
+      {
+        $project: {
+          _id: 0,
+          id: '$_id',
+          firstName: 1,
+          lastName: 1,
+          email: 1,
+          birthDate: 1,
+          age: 1,
+          role: 1,
+          publishedFlatsCount: 1,
+          createdAt: 1,
+        },
+      },
+    ];
+
+    const users = await User.aggregate(pipeline);
+    const totalCount = await User.countDocuments(matchStage);
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Users retrieved successfully',
+      page: Number(page),
+      limit: Number(limit),
+      totalCount,
+      count: users.length,
+      data: users,
+    });
   } catch (error) {
-    // Handle any server errors
-    return res.status(500).json({ status: 'failed', message: 'Error retrieving users', error: error.message });
+    return res.status(500).json({
+      status: 'failed',
+      message: 'Error retrieving users',
+      error: error.message,
+    });
   }
 };
+
 
 // Middleware to update user by ID
 exports.editUserById = async (req, res) => {
@@ -32,10 +125,11 @@ exports.editUserById = async (req, res) => {
     }
 
     // 3) Update the user with the data provided in the request body
-    const updatedUser = await User.findByIdAndUpdate(userId, req.body, { new: true, runValidators: true });
+    Object.assign(user, req.body);
+    await user.save();
 
     // 4) Return success response with the updated user data
-    return res.status(200).json({ status: 'success', message: 'User updated successfully!', updatedUser });
+    return res.status(200).json({ status: 'success', message: 'User updated successfully!', updatedUser: user });
   } catch (error) {
     // Handle any server errors
     return res.status(500).json({ status: 'failed', message: 'Error updating user', error: error.message });
@@ -112,39 +206,6 @@ exports.deleteUserById = async (req, res) => {
     return res.status(200).json({ status: 'success', message: 'User and all associated data deleted successfully!' });
   } catch (error) {
     return res.status(500).json({ status: 'failed', message: 'Error deleting user', error: error.message });
-  }
-};
-
-// Middleware to get how many flats has each user
-exports.getUsersFlatCount = async (req, res) => {
-  try {
-    // 1. Retrieve all users with basic fields
-    const users = await User.find({}, 'firstName lastName email role').lean();
-
-    // 2. For each user, count the number of flats they own
-    const result = await Promise.all(
-      users.map(async (user) => {
-        const flatCount = await Flat.countDocuments({ owner: user._id });
-        return {
-          ...user,
-          flatCount,
-        };
-      })
-    );
-
-    // 3. Return the list of users with flat count
-    res.status(200).json({
-      status: 'success',
-      count: result.length,
-      data: result,
-    });
-  } catch (error) {
-    console.error('Error fetching users with flat count:', error);
-    res.status(500).json({
-      status: 'failed',
-      message: 'Error fetching users with flat count',
-      error: error.message,
-    });
   }
 };
 
