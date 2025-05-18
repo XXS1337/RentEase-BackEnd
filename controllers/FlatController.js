@@ -3,6 +3,7 @@ const { v2: cloudinary } = require('cloudinary');
 const Flat = require('./../models/FlatModel');
 const User = require('./../models/UserModel');
 const Message = require('./../models/MessageModel');
+const logger = require('../utils/logger');
 
 // Middleware to add a new flat
 exports.addFlat = async (req, res) => {
@@ -13,9 +14,7 @@ exports.addFlat = async (req, res) => {
     return res.status(400).json({ status: 'failed', message: 'Image upload failed or missing' });
   }
 
-  console.log('📦 înainte de salvare:', req.body.dateAvailable);
   req.body.dateAvailable = Number(req.body.dateAvailable);
-  console.log('📦 după conversie (timestamp):', req.body.dateAvailable);
 
   // Prepare full data with image included
   const flatData = {
@@ -47,10 +46,11 @@ exports.addFlat = async (req, res) => {
 
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((val) => val.message);
+      logger.error(`Validation error while adding flat: ${messages.join(', ')}`);
       return res.status(400).json({ status: 'failed', error: messages });
     }
-
     //  Handle any server errors
+    logger.error(`Error adding flat: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Error adding flat' });
   }
 };
@@ -150,7 +150,7 @@ exports.getAllFlats = async (req, res) => {
       data: flats,
     });
   } catch (error) {
-    console.error('Error fetching flats:', error);
+    logger.error(`Error fetching flats: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error fetching flats', error: error.message });
   }
 };
@@ -175,6 +175,7 @@ exports.getFlatById = async (req, res) => {
     res.status(200).json({ status: 'success', data: flat });
   } catch (error) {
     //  Handle any server errors
+    logger.error(`Error retrieving flat details: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Error retrieving flat details' });
   }
 };
@@ -232,9 +233,10 @@ exports.updateFlat = async (req, res) => {
   } catch (error) {
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map((err) => err.message);
+      logger.error(`Validation error updating flat: ${errors.join(', ')}`);
       return res.status(400).json({ status: 'failed', message: errors.join(', ') });
     }
-
+    logger.error(`Error updating flat: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Error updating flat' });
   }
 };
@@ -281,7 +283,7 @@ exports.deleteFlat = async (req, res) => {
 
     res.status(200).json({ status: 'success', message: 'Flat deleted successfully', data: { id: flatId } });
   } catch (error) {
-    console.error('Error deleting flat:', error);
+    logger.error(`Error deleting flat: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Error deleting flat' });
   }
 };
@@ -295,7 +297,7 @@ exports.getMyFlats = async (req, res) => {
 
     return res.status(200).json({ status: 'success', count: flats.length, data: flats });
   } catch (error) {
-    console.error('Error fetching user flats:', error);
+    logger.error(`Error fetching user flats: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error fetching your flats' });
   }
 };
@@ -340,6 +342,7 @@ exports.addToFavorites = async (req, res) => {
     return res.status(200).json({ status: 'success', message: 'Flat added to favorites', favorites: user.favoriteFlats });
   } catch (error) {
     //  Handle any server errors
+    logger.error(`Error adding flat to favorites: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error adding flat to favorites', error });
   }
 };
@@ -379,6 +382,7 @@ exports.removeFromFavorites = async (req, res) => {
     return res.status(200).json({ status: 'success', message: 'Flat removed from favorites', favorites: user.favoriteFlats });
   } catch (error) {
     //  Handle any server errors
+    logger.error(`Error removing flat from favorites: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error removing flat from favorites' });
   }
 };

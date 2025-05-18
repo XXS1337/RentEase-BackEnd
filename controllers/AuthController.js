@@ -7,6 +7,7 @@ const { v2: cloudinary } = require('cloudinary');
 const { createToken } = require('../utils/authUtils');
 const emailService = require('../utils/mailtrapConfig');
 const crypto = require('crypto');
+const logger = require('../utils/logger');
 
 // * Authentication middleware
 
@@ -26,15 +27,17 @@ exports.register = async (req, res) => {
     if (error.name === 'ValidationError') {
       // Extract all validation error messages
       const errors = Object.values(error.errors).map((el) => el.message);
+      logger.error(`Validation error during registration: ${errors.join(', ')}`);
       return res.status(400).json({ status: 'failed', message: 'Validation error', errors: errors });
     }
 
     // Handle duplicate email error (MongoDB duplicate key error)
     if (error.code === 11000) {
+      logger.error(`Duplicate email during registration: ${req.body.email}`);
       return res.status(400).json({ status: 'failed', message: 'Email already exists' });
     }
-
     //  Handle any server errors
+    logger.error(`Error adding user: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error adding user', error: error.message });
   }
 };
@@ -65,6 +68,7 @@ exports.checkEmail = async (req, res) => {
     res.status(200).json({ status: 'success', available: !userExists, message: userExists ? 'Email already registered' : 'Email available' });
   } catch (error) {
     //  Handle any server errors
+    logger.error(`Error checking email: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Internal server error while checking email availability', error: error.message });
   }
 };
@@ -100,6 +104,7 @@ exports.login = async (req, res) => {
     return res.status(200).json({ status: 'success', message: 'User logged in successfully', userDB, token, expiresIn: expiresInSeconds });
   } catch (error) {
     //  Handle any server errors
+    logger.error(`Login error: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error logging in user', error: error.message });
   }
 };
@@ -108,39 +113,35 @@ exports.login = async (req, res) => {
 exports.forgotPassword = async (req, res) => {
   const { email } = req.body;
 
-  // 1) Validate the email format
   if (!email || !validator.isEmail(email)) {
     return res.status(400).json({ status: 'failed', message: 'Invalid email format!' });
   }
 
   try {
-    // 2) Find the user based on the email provided
     const user = await User.findOne({ email });
 
-    // 3) If no user found, return a 404 error
     if (!user) {
-      return res.status(404).json({ status: 'failed', message: 'User not found!' });
+      return res.status(200).json({ status: 'success', message: 'If this email is registered, a reset link has been sent.' });
     }
 
-    // 4) Generate a reset password token and save it
     const resetToken = await user.createNewPasswordToken();
     await user.save();
 
-    // 5) Prepare the reset URL (use environment variable for production URL)
-    const resetUrl = `${process.env.FRONTEND_URL}/users/resetPassword/${resetToken}`; // Use an environment variable for frontend URL
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
     const message = `Please click on this link to reset your password: ${resetUrl}. This link will expire in 10 minutes.`;
 
-    // 6) Try to send the reset email
     try {
       await emailService({
         email: user.email,
         subject: 'Reset Password',
         message,
+        resetUrl,
+        userName: user.firstName || 'User',
       });
 
-      return res.status(200).json({ status: 'success', message: 'Reset email sent successfully!' });
+      return res.status(200).json({ status: 'success', message: 'If this email is registered, a reset link has been sent.' });
     } catch (error) {
-      // If error occurs while sending email, reset token fields and return error response
+      logger.error(`Error sending reset email: ${error.message}`);
       user.passwordResetToken = undefined;
       user.passwordResetTokenExpires = undefined;
       await user.save();
@@ -148,7 +149,7 @@ exports.forgotPassword = async (req, res) => {
       return res.status(500).json({ status: 'failed', message: 'Error sending email', error: error.message });
     }
   } catch (error) {
-    // Handle any other server errors
+    logger.error(`Error in forgot password process: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error processing password reset request', error: error.message });
   }
 };
@@ -184,6 +185,7 @@ exports.resetPassword = async (req, res) => {
     return res.status(200).json({ status: 'success', message: 'Password reset successfully!' });
   } catch (error) {
     // Handle any other server errors
+    logger.error(`Reset password error: ${error.message}`);
     return res.status(500).json({ status: 'error', message: 'An error occurred while resetting the password. Please try again later.', error: error.message });
   }
 };
@@ -213,12 +215,14 @@ exports.protect = async (req, res, next) => {
       decodedToken = jwt.verify(token, process.env.SECRET_STR);
     } catch (error) {
       // Handle different types of JWT errors
+      logger.error(`Token verification error: ${error.message}`);
       if (error instanceof jwt.JsonWebTokenError) {
         return res.status(401).json({ status: 'failed', message: 'Invalid token!' });
       } else if (error instanceof jwt.TokenExpiredError) {
         return res.status(401).json({ status: 'failed', message: 'Token expired!' });
       }
       // Catch any other errors during token verification
+      logger.error(`Protect middleware error: ${error.message}`);
       return res.status(500).json({ status: 'failed', message: 'Error verifying token', error: error.message });
     }
 
@@ -344,6 +348,7 @@ exports.updateProfile = async (req, res) => {
 
     return res.status(200).json(response);
   } catch (error) {
+    logger.error(`Update profile error: ${error.message}`);
     // Handle validation errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map((el) => el.message);
@@ -397,6 +402,7 @@ exports.deleteProfile = async (req, res) => {
     // 8. Success response
     return res.status(200).json({ status: 'success', message: 'Account and all associated data deleted successfully!' });
   } catch (error) {
+    logger.error(`Delete profile error: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error deleting account', error: error.message });
   }
 };

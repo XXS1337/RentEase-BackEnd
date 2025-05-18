@@ -1,5 +1,6 @@
 const Flat = require('./../models/FlatModel');
 const Message = require('./../models/MessageModel');
+const logger = require('../utils/logger');
 
 // Middleware to add a new message (any authenticated user can send a message to the flat owner)
 exports.addMessage = async (req, res) => {
@@ -22,7 +23,7 @@ exports.addMessage = async (req, res) => {
 
     res.status(201).json({ status: 'success', data: message });
   } catch (error) {
-    console.error('Error adding message:', error);
+    logger.error(`Error adding message: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Server error while sending message' });
   }
 };
@@ -68,7 +69,7 @@ exports.getAllMessages = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error fetching messages:', error);
+    logger.error(`Error fetching messages: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error fetching messages' });
   }
 };

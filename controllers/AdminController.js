@@ -2,6 +2,7 @@ const User = require('./../models/UserModel');
 const Flat = require('./../models/FlatModel');
 const Message = require('./../models/MessageModel');
 const { v2: cloudinary } = require('cloudinary');
+const logger = require('../utils/logger');
 
 // * Admin only middleware
 // Middleware to get all users from the database (admin only)
@@ -48,11 +49,13 @@ exports.getAllUsers = async (req, res) => {
       ...(filters.flatsCount
         ? (() => {
             const [min, max] = filters.flatsCount.split('-').map(Number);
-            return [{
-              $match: {
-                publishedFlatsCount: { $gte: min, $lte: max },
+            return [
+              {
+                $match: {
+                  publishedFlatsCount: { $gte: min, $lte: max },
+                },
               },
-            }];
+            ];
           })()
         : []),
 
@@ -102,14 +105,10 @@ exports.getAllUsers = async (req, res) => {
       data: users,
     });
   } catch (error) {
-    return res.status(500).json({
-      status: 'failed',
-      message: 'Error retrieving users',
-      error: error.message,
-    });
+    logger.error(`Error retrieving users: ${error.message}`);
+    return res.status(500).json({ status: 'failed', message: 'Error retrieving users', error: error.message });
   }
 };
-
 
 // Middleware to update user by ID
 exports.editUserById = async (req, res) => {
@@ -132,6 +131,7 @@ exports.editUserById = async (req, res) => {
     return res.status(200).json({ status: 'success', message: 'User updated successfully!', updatedUser: user });
   } catch (error) {
     // Handle any server errors
+    logger.error(`Error updating user: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error updating user', error: error.message });
   }
 };
@@ -162,6 +162,7 @@ exports.updateRole = async (req, res) => {
     return res.status(200).json({ status: 'success', message: 'User role updated successfully!', user });
   } catch (error) {
     // 5) Handle any server errors
+    logger.error(`Error updating user role: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error updating user role', error: error.message });
   }
 };
@@ -205,6 +206,7 @@ exports.deleteUserById = async (req, res) => {
     // 9. Return success message
     return res.status(200).json({ status: 'success', message: 'User and all associated data deleted successfully!' });
   } catch (error) {
+    logger.error(`Error deleting user: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error deleting user', error: error.message });
   }
 };
@@ -219,6 +221,7 @@ exports.getUserById = async (req, res) => {
 
     res.status(200).json(user);
   } catch (error) {
+    logger.error(`Error retrieving user by ID: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Error retrieving user', error: error.message });
   }
 };
