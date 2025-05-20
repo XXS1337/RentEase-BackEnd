@@ -19,8 +19,13 @@ exports.addMessage = async (req, res) => {
       return res.status(403).json({ status: 'failed', message: 'Owners cannot send messages to their own flats' });
     }
 
+    // Creează mesajul
     const message = await Message.create({ content, flatId, senderId });
 
+    // Adaugă mesajul în array-ul flatului
+    await Flat.findByIdAndUpdate(flatId, { $push: { messages: message._id } });
+
+    // Returnează mesajul nou
     res.status(201).json({ status: 'success', data: message });
   } catch (error) {
     logger.error(`Error adding message: ${error.message}`);
