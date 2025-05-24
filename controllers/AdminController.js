@@ -125,9 +125,17 @@ exports.editUserById = async (req, res) => {
 
     // 3) Update the user with the data provided in the request body
     Object.assign(user, req.body);
+
+    // 4) Update passwordChangedAt if password is changed
+    if (req.body.newPassword && typeof req.body.newPassword === 'string') {
+      user.password = req.body.newPassword;
+      user.passwordChangedAt = Date.now();
+    }
+
+    // 5) Save user
     await user.save();
 
-    // 4) Return success response with the updated user data
+    // 6) Return success response with the updated user data
     return res.status(200).json({ status: 'success', message: 'User updated successfully!', updatedUser: user });
   } catch (error) {
     // Handle any server errors

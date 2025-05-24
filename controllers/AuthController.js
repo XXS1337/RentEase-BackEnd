@@ -291,6 +291,7 @@ exports.updateProfile = async (req, res) => {
         // Handle password update
         case 'newPassword':
           user.password = req.body.newPassword;
+          user.passwordChangedAt = Date.now();
           shouldUpdatePassword = true;
           break;
 
