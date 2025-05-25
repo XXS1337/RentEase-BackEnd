@@ -87,8 +87,13 @@ exports.getAllFlats = async (req, res) => {
         // Partial + case-insensitive text match
         filter[key] = { $regex: value, $options: 'i' };
       } else {
-        // Exact match
-        filter[key] = isNaN(value) ? value : Number(value);
+        // Convert 'true'/'false' strings to booleans for fields like hasAC
+        if (value === 'true' || value === 'false') {
+          filter[key] = value === 'true'; // convert to Boolean
+        } else {
+          // Otherwise, use number if numeric, or keep as string
+          filter[key] = isNaN(value) ? value : Number(value);
+        }
       }
     }
 
