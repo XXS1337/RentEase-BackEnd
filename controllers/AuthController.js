@@ -17,13 +17,13 @@ exports.register = async (req, res) => {
     // 1) Create a new user based on the request body
     const newUser = await User.create(req.body);
 
-    // 2) Remove password from the output
+    // 2) Remove password from the output for security
     newUser.password = undefined;
 
-    // 3) Send a success response with the newly created user (without password)
+    // 3) Send success response with the newly created user (without password)
     res.status(200).json({ status: 'success', message: `User ${req.body.firstName} ${req.body.lastName} created successfully`, data: newUser });
   } catch (error) {
-    // Handle Mongoose validation errors
+    // Handle validation errors from Mongoose (e.g. invalid fields)
     if (error.name === 'ValidationError') {
       // Extract all validation error messages
       const errors = Object.values(error.errors).map((el) => el.message);
@@ -36,7 +36,8 @@ exports.register = async (req, res) => {
       logger.error(`Duplicate email during registration: ${req.body.email}`);
       return res.status(400).json({ status: 'failed', message: 'Email already exists' });
     }
-    //  Handle any server errors
+
+    // Log and return any other server errors
     logger.error(`Error adding user: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error adding user', error: error.message });
   }
@@ -67,7 +68,7 @@ exports.checkEmail = async (req, res) => {
     // 6) Send response based on email availability
     res.status(200).json({ status: 'success', available: !userExists, message: userExists ? 'Email already registered' : 'Email available' });
   } catch (error) {
-    //  Handle any server errors
+    // Log and return server error
     logger.error(`Error checking email: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Internal server error while checking email availability', error: error.message });
   }
@@ -76,7 +77,7 @@ exports.checkEmail = async (req, res) => {
 // Middleware to handle user login by verifying credentials and generating a JWT token
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body; // Extract email and password from request body
 
     // 1) Check if email and password are provided
     if (!email || !password) {
@@ -103,7 +104,7 @@ exports.login = async (req, res) => {
     // 7) Send response with user data, token and expiration time
     return res.status(200).json({ status: 'success', message: 'User logged in successfully', userDB, token, expiresIn: expiresInSeconds });
   } catch (error) {
-    //  Handle any server errors
+    // Log and return server error
     logger.error(`Login error: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error logging in user', error: error.message });
   }
@@ -111,26 +112,32 @@ exports.login = async (req, res) => {
 
 // Middleware to handle forgot password functionality by generating a reset token and sending a reset email
 exports.forgotPassword = async (req, res) => {
-  const { email } = req.body;
+  const { email } = req.body; // Extract the email from the request body
 
+  // Validate the presence and format of the email
   if (!email || !validator.isEmail(email)) {
     return res.status(400).json({ status: 'failed', message: 'Invalid email format!' });
   }
 
   try {
+    // Find the user in the database using the provided email
     const user = await User.findOne({ email });
 
+    // Always return 200 even if user is not found (security reason: avoid leaking info)
     if (!user) {
       return res.status(200).json({ status: 'success', message: 'If this email is registered, a reset link has been sent.' });
     }
 
+    // Generate a password reset token and save it on the user document
     const resetToken = await user.createNewPasswordToken();
     await user.save();
 
+    // Build the reset URL that will be emailed to the user
     const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
     const message = `Please click on this link to reset your password: ${resetUrl}. This link will expire in 10 minutes.`;
 
     try {
+      // Send the reset email using the email service
       await emailService({
         email: user.email,
         subject: 'Reset Password',
@@ -139,16 +146,20 @@ exports.forgotPassword = async (req, res) => {
         userName: user.firstName || 'User',
       });
 
+      // Send success response after sending the email
       return res.status(200).json({ status: 'success', message: 'If this email is registered, a reset link has been sent.' });
     } catch (error) {
+      // If sending email fails, clean up the reset token fields
       logger.error(`Error sending reset email: ${error.message}`);
       user.passwordResetToken = undefined;
       user.passwordResetTokenExpires = undefined;
       await user.save();
 
+      // Return error message
       return res.status(500).json({ status: 'failed', message: 'Error sending email', error: error.message });
     }
   } catch (error) {
+    // Log and return server error
     logger.error(`Error in forgot password process: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error processing password reset request', error: error.message });
   }
@@ -184,7 +195,7 @@ exports.resetPassword = async (req, res) => {
     // 8) Send a success response indicating the password was reset successfully
     return res.status(200).json({ status: 'success', message: 'Password reset successfully!' });
   } catch (error) {
-    // Handle any other server errors
+    // Log and return server error
     logger.error(`Reset password error: ${error.message}`);
     return res.status(500).json({ status: 'error', message: 'An error occurred while resetting the password. Please try again later.', error: error.message });
   }
@@ -243,10 +254,10 @@ exports.protect = async (req, res, next) => {
     // 5) Attach the current user object to the request so it can be accessed by other middlewares/routes
     req.currentUser = currentUser;
 
-    // Proceed to the next middleware or route handler
+    // 6) Proceed to the next middleware or route handler
     next();
   } catch (error) {
-    //  Handle any server errors
+    // Return server error
     return res.status(500).json({ status: 'failed', message: 'Error in validating token', error: error.message });
   }
 };
@@ -267,6 +278,7 @@ exports.restrictIfNotAdmin = async (req, res, next) => {
 
 // Middleware to get logged-in user's data
 exports.getMe = async (req, res) => {
+  // Return the current user info from the request (set by protect middleware)
   return res.status(200).json({ status: 'success', currentUser: req.currentUser });
 };
 
@@ -275,6 +287,8 @@ exports.updateProfile = async (req, res) => {
   try {
     // 1) Get the authenticated user
     const user = await User.findById(req.currentUser.id);
+
+    // If user is not found, return 404
     if (!user) {
       return res.status(404).json({ status: 'failed', message: 'User not found' });
     }
@@ -347,6 +361,7 @@ exports.updateProfile = async (req, res) => {
       response.token = newToken;
     }
 
+    // Send response with the new user's data
     return res.status(200).json(response);
   } catch (error) {
     logger.error(`Update profile error: ${error.message}`);
@@ -361,7 +376,7 @@ exports.updateProfile = async (req, res) => {
       return res.status(400).json({ status: 'failed', message: 'Email already in use' });
     }
 
-    // Handle other errors
+    // Return any other server errors
     return res.status(500).json({ status: 'failed', message: 'Error updating user', error: error.message });
   }
 };
@@ -369,7 +384,7 @@ exports.updateProfile = async (req, res) => {
 // Middleware to delete the user's profile
 exports.deleteProfile = async (req, res) => {
   try {
-    const userId = req.currentUser.id;
+    const userId = req.currentUser.id; // ID of the logged-in user
 
     // 1. Delete all messages sent by this user
     await Message.deleteMany({ senderId: userId });
@@ -396,13 +411,15 @@ exports.deleteProfile = async (req, res) => {
     // 7. Delete the user
     const deletedUser = await User.findByIdAndDelete(userId);
 
+    // If user was already deleted or not found
     if (!deletedUser) {
       return res.status(404).json({ status: 'failed', message: 'User not found!' });
     }
 
-    // 8. Success response
+    // 8. Send success response
     return res.status(200).json({ status: 'success', message: 'Account and all associated data deleted successfully!' });
   } catch (error) {
+    // Log and return server error
     logger.error(`Delete profile error: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error deleting account', error: error.message });
   }

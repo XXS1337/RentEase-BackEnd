@@ -1,23 +1,23 @@
 const nodemailer = require('nodemailer');
 
-// Service to send email using Nodemailer
+// Service to send an email using Nodemailer
 const emailService = async (data) => {
-  // 1) Create a transporter using SMTP settings (from environment variables)
+  // 1) Create a transporter object with SMTP configuration
   const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST, // SMTP server host
-    port: process.env.EMAIL_PORT, // Port number
-    secure: false, // Use false for ports other than 465 (for security purposes)
+    host: process.env.EMAIL_HOST, // SMTP server hostname
+    port: process.env.EMAIL_PORT, // SMTP port
+    secure: false, // Set to true for port 465 (SSL), false for other ports
     auth: {
-      user: process.env.EMAIL_USERNAME, // SMTP username
-      pass: process.env.EMAIL_PASSWORD, // SMTP password
+      user: process.env.EMAIL_USERNAME, // SMTP login username
+      pass: process.env.EMAIL_PASSWORD, // SMTP login password
     },
   });
 
-  // 2) Set up the email options (sender, receiver, subject, and body)
+  // 2) Set email options: sender, recipient, subject, and email content
   const options = {
-    from: 'Support <support@example.com>',
-    to: data.email,
-    subject: data.subject,
+    from: 'Support <support@example.com>', // Sender info shown in email
+    to: data.email, // Recipient's email address
+    subject: data.subject, // Subject line
     html: `
     <html>
       <body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4;">
@@ -50,8 +50,9 @@ const emailService = async (data) => {
     `,
   };
 
-  // 3) Send the email using the transporter
+  // 3) Send the email using the configured transporter and email options
   await transporter.sendMail(options);
 };
 
+// Export the email sending service
 module.exports = emailService;

@@ -3,10 +3,19 @@ const router = express.Router();
 const authController = require('./../controllers/AuthController');
 const messageController = require('./../controllers/MessageController');
 
-// Route to send a new message (any authenticated user can send a message to the flat owner)
+/**
+ * @route POST /flats/:flatId/messages
+ * @description Send a new message to the flat owner (only authenticated users)
+ */
 router.post('/:flatId/messages', authController.protect, messageController.addMessage);
 
-// Route to get all messages for a specific flat (accessible by the flat owner)
+/**
+ * @route GET /flats/:flatId/messages
+ * @description Get all messages for a specific flat (only accessible by the flat owner)
+ */
 router.get('/:flatId/messages', authController.protect, messageController.getAllMessages);
 
+/**
+ * @description Export the router to be used in main app
+ */
 module.exports = router;

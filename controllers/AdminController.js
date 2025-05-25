@@ -5,7 +5,8 @@ const { v2: cloudinary } = require('cloudinary');
 const logger = require('../utils/logger');
 
 // * Admin only middleware
-// Middleware to get all users from the database (admin only)
+
+// Middleware to get all users from the database
 exports.getAllUsers = async (req, res) => {
   try {
     const { page = 1, limit = 100000, sort, ...filters } = req.query;
@@ -13,7 +14,7 @@ exports.getAllUsers = async (req, res) => {
 
     const matchStage = {};
 
-    // Filter: role
+    // Filter by role if provided
     if (filters.role) {
       matchStage.role = filters.role;
     }
@@ -27,11 +28,11 @@ exports.getAllUsers = async (req, res) => {
       matchStage.birthDate = { $gte: minDate, $lte: maxDate };
     }
 
-    // Pipeline
+    // Aggregation pipeline to filter, sort and paginate users
     const pipeline = [
       { $match: matchStage },
 
-      // Add flats count & age
+      // Add publishedFlatsCount and age
       {
         $addFields: {
           publishedFlatsCount: { $size: { $ifNull: ['$addedFlats', []] } },
@@ -45,7 +46,7 @@ exports.getAllUsers = async (req, res) => {
         },
       },
 
-      // Filter: publishedFlatsCount
+      // Filter by publishedFlatsCount if provided
       ...(filters.flatsCount
         ? (() => {
             const [min, max] = filters.flatsCount.split('-').map(Number);
@@ -59,7 +60,7 @@ exports.getAllUsers = async (req, res) => {
           })()
         : []),
 
-      // Sort
+      // Sort stage
       (() => {
         if (!sort) return { $sort: { createdAt: -1 } };
         const sortObj = {};
@@ -72,6 +73,7 @@ exports.getAllUsers = async (req, res) => {
         return { $sort: sortObj };
       })(),
 
+      // Pagination
       { $skip: skip },
       { $limit: Number(limit) },
 
@@ -92,9 +94,11 @@ exports.getAllUsers = async (req, res) => {
       },
     ];
 
+    // Execute aggregation
     const users = await User.aggregate(pipeline);
     const totalCount = await User.countDocuments(matchStage);
 
+    // Send success response with user data
     return res.status(200).json({
       status: 'success',
       message: 'Users retrieved successfully',
@@ -105,12 +109,13 @@ exports.getAllUsers = async (req, res) => {
       data: users,
     });
   } catch (error) {
+    // Log and return server error
     logger.error(`Error retrieving users: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error retrieving users', error: error.message });
   }
 };
 
-// Middleware to update user by ID
+// Middleware to update a user by ID
 exports.editUserById = async (req, res) => {
   try {
     // 1) Get user ID from the parameters
@@ -135,20 +140,20 @@ exports.editUserById = async (req, res) => {
     // 5) Save user
     await user.save();
 
-    // 6) Return success response with the updated user data
+    // 6) Send success response with the updated user data
     return res.status(200).json({ status: 'success', message: 'User updated successfully!', updatedUser: user });
   } catch (error) {
-    // Handle any server errors
+    // Log and return server error
     logger.error(`Error updating user: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error updating user', error: error.message });
   }
 };
 
-// Middleware to update the role of a user by admin
+// Middleware to update a user's role
 exports.updateRole = async (req, res) => {
   try {
-    const userId = req.params.id;
-    const newRole = req.body.role;
+    const userId = req.params.id; // ID of user to update
+    const newRole = req.body.role; // New role value
 
     // 1) Validate the new role
     const validRoles = ['admin', 'user'];
@@ -169,7 +174,7 @@ exports.updateRole = async (req, res) => {
     // 4) Return a success response
     return res.status(200).json({ status: 'success', message: 'User role updated successfully!', user });
   } catch (error) {
-    // 5) Handle any server errors
+    // Log and return server error
     logger.error(`Error updating user role: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error updating user role', error: error.message });
   }
@@ -178,7 +183,7 @@ exports.updateRole = async (req, res) => {
 // Middleware to delete a user by ID
 exports.deleteUserById = async (req, res) => {
   try {
-    const userId = req.params.id;
+    const userId = req.params.id; // ID of user to delete
 
     // 1. Check if user exists
     const user = await User.findById(userId);
@@ -211,24 +216,30 @@ exports.deleteUserById = async (req, res) => {
     // 8. Delete the user from the database
     await User.findByIdAndDelete(userId);
 
-    // 9. Return success message
+    // 9. Send success response
     return res.status(200).json({ status: 'success', message: 'User and all associated data deleted successfully!' });
   } catch (error) {
+    // Log and return server error
     logger.error(`Error deleting user: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error deleting user', error: error.message });
   }
 };
 
+// Middleware to get a user by ID
 exports.getUserById = async (req, res) => {
   try {
+    // Fetch the user from the database using the ID from URL params
     const user = await User.findById(req.params.id);
 
+    // If the user does not exist, return 404 Not Found response
     if (!user) {
       return res.status(404).json({ status: 'failed', message: 'User not found' });
     }
 
+    //Send success response with user's data
     res.status(200).json(user);
   } catch (error) {
+    // Log and return server error
     logger.error(`Error retrieving user by ID: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Error retrieving user', error: error.message });
   }

@@ -3,8 +3,10 @@ const validator = require('validator');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
+// Define the User schema
 const userSchema = new mongoose.Schema(
   {
+    // User's first name with validation
     firstName: {
       type: String,
       required: [true, 'User must have a first name'],
@@ -18,6 +20,7 @@ const userSchema = new mongoose.Schema(
         message: 'First name can only contain letters and spaces',
       },
     },
+    // User's last name with validation
     lastName: {
       type: String,
       required: [true, 'User must have a last name'],
@@ -31,6 +34,7 @@ const userSchema = new mongoose.Schema(
         message: 'Last name can only contain letters and spaces',
       },
     },
+    // User's birth date with age validation (must be between 18 and 120 years old)
     birthDate: {
       type: Date,
       required: [true, 'Birth date is required'],
@@ -53,6 +57,7 @@ const userSchema = new mongoose.Schema(
         },
       },
     },
+    // User's email address with format validation
     email: {
       type: String,
       required: [true, 'User must have an email'],
@@ -61,6 +66,7 @@ const userSchema = new mongoose.Schema(
       trim: true,
       validate: [validator.isEmail, 'Please enter a valid email'],
     },
+    // User's password with strength validation
     password: {
       type: String,
       required: [true, 'User must have a password'],
@@ -74,67 +80,77 @@ const userSchema = new mongoose.Schema(
         message: 'Password must be at least 6 characters and contain at least one letter, one number, and one special character',
       },
     },
+    // User role (admin or regular user)
     role: {
       type: String,
       enum: ['user', 'admin'],
       default: 'user',
     },
+    // List of flat IDs marked as favorite by the user
     favoriteFlats: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Flat',
       },
     ],
+    // List of flat IDs created by the user
     addedFlats: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Flat',
       },
     ],
+    // Timestamp for when password was last changed (used to invalidate tokens)
     passwordChangedAt: {
       type: Date,
     },
+    // Token used for password reset
     passwordResetToken: {
       type: String,
     },
+    // Token expiration used for password reset
     passwordResetTokenExpires: {
       type: Date,
     },
   },
+  // Automatically include createdAt and updatedAt fields
   { timestamps: true }
 );
 
-// Middleware to encrypt password
+// Pre-save middleware to hash password before saving
 userSchema.pre('save', async function (next) {
+  // If the password field was not modified, skip hashing
   if (!this.isModified('password')) {
     return next();
   }
 
+  // Hash the password using bcrypt with 12 salt rounds
   this.password = await bcrypt.hash(this.password, 12);
 
+  // If the document is new (e.g. user is registering), ensure role is set to 'user'
   if (this.isNew) {
     this.role = 'user';
   }
 
+  // Proceed to the next middleware or save operation
   next();
 });
 
-// Method to check password
+// Instance method to compare input password with hashed password
 userSchema.methods.comparePassword = async function (bodyPass) {
   return await bcrypt.compare(bodyPass, this.password);
 };
 
-// Method to check is the user changed password since token was issued
+// Instance method to check if password was changed after token was issued
 userSchema.methods.isPasswordChanged = async function (jwtTimeStamp) {
   if (this.passwordChangedAt) {
     const passwordChangedTimestamp = parseInt(this.passwordChangedAt / 1000);
     return jwtTimeStamp < passwordChangedTimestamp;
   }
-
   return false;
 };
 
-//  Generate and return a secure password reset token
+// Instance method to generate a password reset token
 userSchema.methods.createNewPasswordToken = function () {
   // Generate a secure random token (sent to the user's email)
   const resetToken = crypto.randomBytes(32).toString('hex');
@@ -149,4 +165,5 @@ userSchema.methods.createNewPasswordToken = function () {
   return resetToken;
 };
 
+// Export the User model
 module.exports = mongoose.model('User', userSchema);

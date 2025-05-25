@@ -5,18 +5,20 @@ const User = require('./../models/UserModel');
 const Message = require('./../models/MessageModel');
 const logger = require('../utils/logger');
 
-// Middleware to add a new flat
+// Middleware to add a new flat to the database
+// Requires image upload and assigns the flat to the logged-in user
 exports.addFlat = async (req, res) => {
-  const owner = req.currentUser._id;
+  const owner = req.currentUser._id; // ID of the logged-in use
 
-  // Check if file is present
+  // Check if image was uploaded correctly
   if (!req.file || !req.file.path || !req.file.filename) {
     return res.status(400).json({ status: 'failed', message: 'Image upload failed or missing' });
   }
 
+  // Convert dateAvailable to a number (timestamp)
   req.body.dateAvailable = Number(req.body.dateAvailable);
 
-  // Prepare full data with image included
+  // Construct the flat data with image and owner
   const flatData = {
     ...req.body,
     owner,
@@ -27,19 +29,20 @@ exports.addFlat = async (req, res) => {
   };
 
   try {
-    // Validate the data before saving
+    // Validate data before saving to the database
     const flat = new Flat(flatData);
-    await flat.validate(); // Validation only, no save
+    await flat.validate(); // Only validation, not saving yet
 
-    // Save to DB
+    // Save flat to database
     await flat.save();
 
     // Add flat ID to user's addedFlats
     await User.findByIdAndUpdate(owner, { $push: { addedFlats: flat._id } });
 
+    // Send success response with flat data
     res.status(201).json({ status: 'success', message: 'Flat created successfully', data: flat });
   } catch (error) {
-    // If validation failed, remove uploaded image from Cloudinary
+    // Remove uploaded image if validation failed
     if (req.file && req.file.filename) {
       await cloudinary.uploader.destroy(req.file.filename);
     }
@@ -49,13 +52,14 @@ exports.addFlat = async (req, res) => {
       logger.error(`Validation error while adding flat: ${messages.join(', ')}`);
       return res.status(400).json({ status: 'failed', error: messages });
     }
-    //  Handle any server errors
+
+    // Log and return server error
     logger.error(`Error adding flat: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Error adding flat' });
   }
 };
 
-// Middleware to get all flats using aggregation, filtering, sorting, pagination
+// Middleware to fetch all flats using aggregation and filtering
 exports.getAllFlats = async (req, res) => {
   try {
     const { page = 1, limit = 100000, sort, ...filters } = req.query;
@@ -141,6 +145,7 @@ exports.getAllFlats = async (req, res) => {
     // 8. Get total count (without pagination)
     const totalCount = await Flat.countDocuments(filter);
 
+    // 9. Send success response with paginated and filtered flats
     return res.status(200).json({
       status: 'success',
       page: Number(page),
@@ -150,41 +155,45 @@ exports.getAllFlats = async (req, res) => {
       data: flats,
     });
   } catch (error) {
+    // Log and return server error
     logger.error(`Error fetching flats: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error fetching flats', error: error.message });
   }
 };
 
-// Middleware to get a flat by ID from the database
+// Middleware to get a flat by ID and populate related details
 exports.getFlatById = async (req, res) => {
   try {
-    const flatId = req.params.flatId;
+    const flatId = req.params.flatId; // ID of the flat to retrieve
 
-    // Validate flatId format
+    // Validate the format of flatId
     if (!mongoose.Types.ObjectId.isValid(flatId)) {
       return res.status(400).json({ status: 'failed', message: 'Invalid flat ID format' });
     }
 
-    // Find the flat and populate owner details and flat messages
+    // Find the flat and populate owner and messages
     const flat = await Flat.findById(flatId).populate('owner', 'firstName lastName email').populate('messages');
 
+    // Return 404 if flat not found
     if (!flat) {
       return res.status(404).json({ status: 'failed', message: 'Flat not found' });
     }
 
+    // Send success response with the flat
     res.status(200).json({ status: 'success', data: flat });
   } catch (error) {
-    //  Handle any server errors
+    // Log and return server error
     logger.error(`Error retrieving flat details: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Error retrieving flat details' });
   }
 };
 
 // Middleware to update a flat by ID from the database
+// Only the owner of the flat can perform the update
 exports.updateFlat = async (req, res) => {
   try {
-    const flatId = req.params.flatId;
-    const userId = req.currentUser._id;
+    const flatId = req.params.flatId; // ID of the flat to update
+    const userId = req.currentUser._id; // ID of the logged-in user
 
     // 1. Validate flatId format
     if (!mongoose.Types.ObjectId.isValid(flatId)) {
@@ -222,20 +231,20 @@ exports.updateFlat = async (req, res) => {
       }
     });
 
-    // 6. Save changes
+    // 6. Save the updated flat to the database
     await flat.save();
 
-    res.status(200).json({
-      status: 'success',
-      message: 'Flat updated successfully',
-      data: flat,
-    });
+    // 7. Return a success response with the updated flat data
+    res.status(200).json({ status: 'success', message: 'Flat updated successfully', data: flat });
   } catch (error) {
+    // Handle validation errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map((err) => err.message);
       logger.error(`Validation error updating flat: ${errors.join(', ')}`);
       return res.status(400).json({ status: 'failed', message: errors.join(', ') });
     }
+
+    // Log and return any other server errors
     logger.error(`Error updating flat: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Error updating flat' });
   }
@@ -245,15 +254,15 @@ exports.updateFlat = async (req, res) => {
 // Deletes the flat, all the associated messages and removes the flat from all user's favorites
 exports.deleteFlat = async (req, res) => {
   try {
-    const flatId = req.params.flatId;
-    const userId = req.currentUser._id;
+    const flatId = req.params.flatId; // ID of the flat to delete
+    const userId = req.currentUser._id; // ID of the logged-in user
 
     // 1. Validate flatId format
     if (!mongoose.Types.ObjectId.isValid(flatId)) {
       return res.status(400).json({ status: 'failed', message: 'Invalid flat ID format' });
     }
 
-    // 2. Find the flat first to verify ownership
+    // 2. Check if flat exists and belongs to the user
     const flat = await Flat.findById(flatId);
     if (!flat) {
       return res.status(404).json({ status: 'failed', message: 'Flat not found' });
@@ -281,37 +290,42 @@ exports.deleteFlat = async (req, res) => {
     // 8. Finally, delete the flat
     await Flat.findByIdAndDelete(flatId);
 
+    // 9. Send success response
     res.status(200).json({ status: 'success', message: 'Flat deleted successfully', data: { id: flatId } });
   } catch (error) {
+    // Log and return server error
     logger.error(`Error deleting flat: ${error.message}`);
     res.status(500).json({ status: 'failed', message: 'Error deleting flat' });
   }
 };
 
-// Middleware to get the logged-in user's flats
+// Middleware to get all flats added by the logged-in user
 exports.getMyFlats = async (req, res) => {
   try {
-    const userId = req.currentUser._id;
+    const userId = req.currentUser._id; // ID of the logged-in user
 
+    // Find flats owned by user and sort by newest
     const flats = await Flat.find({ owner: userId }).sort({ createdAt: -1 });
 
+    // Send success response
     return res.status(200).json({ status: 'success', count: flats.length, data: flats });
   } catch (error) {
+    // Log and return server error
     logger.error(`Error fetching user flats: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error fetching your flats' });
   }
 };
 
-// Middleware for adding a flat to logged-in users favorites
+// Middleware to add a flat to user's favorites
 exports.addToFavorites = async (req, res) => {
   try {
-    // Accept POST without Body
+    // Fallback for requests with no body
     if (req.headers['content-length'] === '0') {
       req.body = {};
     }
 
-    const userId = req.currentUser._id;
-    const flatId = req.params.flatId;
+    const userId = req.currentUser._id; // ID of the logged-in user
+    const flatId = req.params.flatId; // ID of the flat
 
     // 1. Validate flatId format
     if (!mongoose.Types.ObjectId.isValid(flatId)) {
@@ -339,9 +353,10 @@ exports.addToFavorites = async (req, res) => {
     user.favoriteFlats.push(flatId);
     await user.save();
 
+    // Send success response
     return res.status(200).json({ status: 'success', message: 'Flat added to favorites', favorites: user.favoriteFlats });
   } catch (error) {
-    //  Handle any server errors
+    // Log and return server error
     logger.error(`Error adding flat to favorites: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error adding flat to favorites', error });
   }
@@ -350,13 +365,13 @@ exports.addToFavorites = async (req, res) => {
 // Middleware for removing a flat from favorites
 exports.removeFromFavorites = async (req, res) => {
   try {
-    // Accept POST without Body
+    // Fallback for requests with no body
     if (req.headers['content-length'] === '0') {
       req.body = {};
     }
 
-    const userId = req.currentUser._id;
-    const flatId = req.params.flatId;
+    const userId = req.currentUser._id; // ID of the logged-in user
+    const flatId = req.params.flatId; // ID of the flat
 
     // 1. Validate flatId format
     if (!mongoose.Types.ObjectId.isValid(flatId)) {
@@ -379,9 +394,10 @@ exports.removeFromFavorites = async (req, res) => {
     user.favoriteFlats.splice(index, 1);
     await user.save();
 
+    // Send success response
     return res.status(200).json({ status: 'success', message: 'Flat removed from favorites', favorites: user.favoriteFlats });
   } catch (error) {
-    //  Handle any server errors
+    // Log and return server error
     logger.error(`Error removing flat from favorites: ${error.message}`);
     return res.status(500).json({ status: 'failed', message: 'Error removing flat from favorites' });
   }
