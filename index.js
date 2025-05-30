@@ -5,7 +5,8 @@ const mongoose = require('mongoose');
 const userRoutes = require('./routes/UserRoutes');
 const flatRoutes = require('./routes/FlatRoutes');
 const messageRoutes = require('./routes/MessageRoutes');
-const logger = require('./utils/logger'); // 🔹 Importăm loggerul
+const chatBotRoutes = require('./routes/ChatBotRoutes');
+const logger = require('./utils/logger');
 
 // Initialize Express app
 const app = express();
@@ -38,6 +39,7 @@ mongoose
 app.use('/users', userRoutes); // Routes for user authentication and management
 app.use('/flats', flatRoutes); // Routes for flats
 app.use('/flats', messageRoutes); // Routes for sending/reading messages related to flats
+app.use('/ai', chatBotRoutes); // Route for AI chatbot interactions (e.g. user questions, answers, GPT support)
 
 // Catch-all handler for unmatched routes
 app.all('*', (req, res) => {
