@@ -13,7 +13,7 @@ const logFilePath = path.join(logDirectory, 'app.log');
 
 // Create a Winston logger instance
 const logger = winston.createLogger({
-  level: 'info', // Minimum level to log (e.g., 'info', 'warn', 'error'
+  level: 'info', // Minimum level to log (e.g., 'info', 'warn', 'error')
   format: winston.format.combine(
     winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }), // Add timestamp to each log
     winston.format.printf(({ level, message, timestamp }) => {

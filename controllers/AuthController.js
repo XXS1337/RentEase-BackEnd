@@ -79,6 +79,9 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body; // Extract email and password from request body
 
+    // Log login attempt with email address
+    logger.warn(`Login attempt with email: ${email}`);
+
     // 1) Check if email and password are provided
     if (!email || !password) {
       return res.status(400).json({ status: 'failed', message: 'Please provide email and password' });
