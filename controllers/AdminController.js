@@ -32,15 +32,48 @@ exports.getAllUsers = async (req, res) => {
     const pipeline = [
       { $match: matchStage },
 
-      // Add publishedFlatsCount and age
+      // Add virtual fields: publishedFlatsCount and accurate age
       {
         $addFields: {
+          // Count the number of flats published by the user (handles null as empty array)
           publishedFlatsCount: { $size: { $ifNull: ['$addedFlats', []] } },
+          // Calculate precise age by comparing full birth date to current date
           age: {
-            $dateDiff: {
-              startDate: '$birthDate',
-              endDate: '$$NOW',
-              unit: 'year',
+            $let: {
+              vars: {
+                // Extract birth date components
+                birthYear: { $year: '$birthDate' },
+                birthMonth: { $month: '$birthDate' },
+                birthDay: { $dayOfMonth: '$birthDate' },
+
+                // Extract current date components (using Mongo's $$NOW)
+                nowYear: { $year: '$$NOW' },
+                nowMonth: { $month: '$$NOW' },
+                nowDay: { $dayOfMonth: '$$NOW' },
+              },
+              in: {
+                // Step 1: Base age = nowYear - birthYear
+                // Step 2: Subtract 1 if birthday hasn't occurred yet this year
+                $subtract: [
+                  { $subtract: ['$$nowYear', '$$birthYear'] },
+                  {
+                    $cond: [
+                      {
+                        // If current month is before birth month
+                        // OR current day is before birth day in same month
+                        $or: [
+                          { $lt: ['$$nowMonth', '$$birthMonth'] },
+                          {
+                            $and: [{ $eq: ['$$nowMonth', '$$birthMonth'] }, { $lt: ['$$nowDay', '$$birthDay'] }],
+                          },
+                        ],
+                      },
+                      1, // Subtract 1 year if birthday hasn't occurred yet
+                      0, // Otherwise, keep full difference
+                    ],
+                  },
+                ],
+              },
             },
           },
         },

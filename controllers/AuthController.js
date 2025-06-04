@@ -79,9 +79,6 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body; // Extract email and password from request body
 
-    // Log login attempt with email address
-    logger.warn(`Login attempt with email: ${email}`);
-
     // 1) Check if email and password are provided
     if (!email || !password) {
       return res.status(400).json({ status: 'failed', message: 'Please provide email and password' });
@@ -92,6 +89,10 @@ exports.login = async (req, res) => {
 
     // 3) Check if user exists and if password is correct
     if (!userDB || !(await userDB.comparePassword(password))) {
+      // Log warning because either email not found or password wrong
+      const clientIP = req.headers['x-forwarded-for'] || req.ip; // Get client IP address
+      logger.warn(`Login failed: Invalid credentials for email: ${email} | IP: ${clientIP} ⚠️`);
+
       return res.status(401).json({ status: 'failed', message: 'Invalid email or password' });
     }
 
