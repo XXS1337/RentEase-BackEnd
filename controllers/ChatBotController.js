@@ -6,18 +6,20 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // POST /ai/chatbot
 exports.handleChat = async (req, res) => {
-  const { prompt } = req.body;
+  const { prompt, lang = 'en' } = req.body;
 
   // Validate prompt input
   if (!prompt || typeof prompt !== 'string') {
     return res.status(400).json({ status: 'failed', message: 'Prompt must be a valid string.' });
   }
 
+  const t = (en, ro) => (lang === 'ro' ? ro : en);
+
   // Special greeting response
   if (/^\s*(hello|salut|buna)\s*$/i.test(prompt)) {
     return res.status(200).json({
       status: 'success',
-      message: 'Hello! How can I assist you with your apartment search today?',
+      message: t('Hello! How can I assist you with your apartment search today?', 'Salut! Cu ce te pot ajuta în căutarea apartamentului?'),
       links: [],
       filters: {},
     });
@@ -27,31 +29,45 @@ exports.handleChat = async (req, res) => {
   if (/\b(ajutor|help|instructions)\b/i.test(prompt)) {
     return res.status(200).json({
       status: 'success',
-      message:
+      message: t(
         'You can ask things like:\n- Cheapest flat in Bucharest\n- Cel mai mare apartament din Iași\n- Flats between 300 and 600 euro\n- Apartamente cu aer condiționat în Cluj\n- Smallest flat available in Constanța\n\nYou can also combine filters like price, area and AC.',
+        'Poți întreba lucruri precum:\n- Cel mai ieftin apartament din București\n- Cel mai mare apartament din Iași\n- Apartamente între 300 și 600 de euro\n- Apartamente cu aer condiționat în Cluj\n- Cel mai mic apartament disponibil în Constanța\n\nPoți combina filtre precum preț, suprafață și AC.'
+      ),
       links: [],
       filters: {},
     });
   }
 
-  // Joke response (EN + RO)
+  // Joke response
   if (/\b(joke|glum[aă]|funny|amuzant)\b/i.test(prompt)) {
+    const jokes = {
+      en: [
+        "Why don't real estate agents trust stairs? Because they're always up to something!",
+        'I told my realtor I wanted a two-story house. She said, ‘One story is, it’s haunted…’',
+        'Why did the house go to therapy? Too many issues in the basement.',
+      ],
+      ro: ['De ce nu râde apartamentul? Pentru că nu are umor deloc — are doar spațiu!', 'Ce zice apartamentul când e gol? „Sunt în stare perfectă de mutare!”', 'De ce s-a supărat balconul? Pentru că era lăsat pe dinafară!'],
+    };
+
+    const langJokes = lang === 'ro' ? jokes.ro : jokes.en;
+    const randomJoke = langJokes[Math.floor(Math.random() * langJokes.length)];
+
     return res.status(200).json({
       status: 'success',
-      message: "Why don't real estate agents trust stairs? Because they're always up to something!",
+      message: randomJoke,
       links: [],
       filters: {},
     });
   }
 
   // Random flat request (EN + RO)
-  if (/\b(random|surprinde-ma|surprise me)\b/i.test(prompt)) {
+  if (/\b(random|surprinde-ma|surprise me|aleatoriu)\b/i.test(prompt)) {
     try {
       const randomFlat = await Flat.aggregate([{ $sample: { size: 1 } }]);
       if (!randomFlat.length) {
         return res.status(200).json({
           status: 'success',
-          message: 'No flats available to surprise you with right now.',
+          message: t('No flats available to surprise you with right now.', 'Momentan nu sunt apartamente disponibile pentru a te surprinde.'),
           links: [],
           filters: {},
         });
@@ -59,13 +75,13 @@ exports.handleChat = async (req, res) => {
       const link = `http://localhost:5173/flats/view/${randomFlat[0]._id}`;
       return res.status(200).json({
         status: 'success',
-        message: 'Here is a random flat suggestion for you! 🎲',
+        message: t('Here is a random flat suggestion for you! 🎲', 'Iată o sugestie aleatorie de apartament pentru tine! 🎲'),
         links: [link],
         filters: {},
       });
     } catch (error) {
       logger.error(`Random flat error: ${error.message}`);
-      return res.status(500).json({ status: 'failed', message: 'Failed to fetch random flat.' });
+      return res.status(500).json({ status: 'failed', message: t('Failed to fetch random flat.', 'Eroare la obținerea unui apartament aleatoriu.') });
     }
   }
 
@@ -73,7 +89,7 @@ exports.handleChat = async (req, res) => {
   if (/\b(mul[țt]umesc|thank you|thanks)\b/i.test(prompt)) {
     return res.status(200).json({
       status: 'success',
-      message: "You're very welcome! 😊 Let me know if you'd like help with anything else.",
+      message: t("You're very welcome! 😊 Let me know if you'd like help with anything else.", 'Cu plăcere! 😊 Spune-mi dacă te mai pot ajuta cu ceva.'),
       links: [],
       filters: {},
     });
@@ -89,7 +105,7 @@ exports.handleChat = async (req, res) => {
       if (!flat.length) {
         return res.status(200).json({
           status: 'success',
-          message: `No flats found in ${cityName}.`,
+          message: t(`No flats found in ${cityName}.`, `Nu am găsit apartamente în ${cityName}.`),
           links: [],
           filters: {},
         });
@@ -98,7 +114,7 @@ exports.handleChat = async (req, res) => {
       const link = `http://localhost:5173/flats/view/${flat[0]._id}`;
       return res.status(200).json({
         status: 'success',
-        message: `Here is a suggestion from ${cityName}:`,
+        message: t(`Here is a suggestion from ${cityName}:`, `Iată o sugestie din ${cityName}:`),
         links: [link],
         filters: { city: cityName },
       });
@@ -106,7 +122,7 @@ exports.handleChat = async (req, res) => {
       logger.error(`Recommendation error: ${err.message}`);
       return res.status(500).json({
         status: 'failed',
-        message: 'Failed to recommend a flat in the specified city.',
+        message: t('Failed to recommend a flat in the specified city.', 'Eroare la recomandarea unui apartament în orașul specificat.'),
       });
     }
   }
@@ -121,14 +137,16 @@ exports.handleChat = async (req, res) => {
   })();
 
   try {
+    const systemPrompt =
+      lang === 'ro'
+        ? 'Ești un asistent care extrage filtre pentru căutarea apartamentelor din comenzile utilizatorilor în limba română. Întoarce mereu un obiect JSON cu filtre: city, minPrice, maxPrice, minArea, maxArea, hasAC.'
+        : 'You are an assistant that extracts apartment search filters from English user prompts. Always return a JSON object with filters: city, minPrice, maxPrice, minArea, maxArea, hasAC.';
+
     // 1. Generate filters using OpenAI
     const chatResponse = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
-        {
-          role: 'system',
-          content: 'You are an assistant that extracts apartment search filters from Romanian user prompts. Always return a JSON object with possible filters: city, minPrice, maxPrice, minArea, maxArea, hasAC.',
-        },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: prompt },
       ],
       temperature: 0.3,
@@ -140,7 +158,7 @@ exports.handleChat = async (req, res) => {
     if (!jsonMatch) {
       return res.status(200).json({
         status: 'success',
-        message: 'No filters could be extracted from your prompt.',
+        message: t('No filters could be extracted from your prompt.', 'Nu s-au putut extrage filtre din mesajul tău.'),
         filters: {},
       });
     }
@@ -160,7 +178,7 @@ exports.handleChat = async (req, res) => {
     if (Object.keys(cleaned).length === 0) {
       return res.status(200).json({
         status: 'success',
-        message: 'Sorry, I could not understand your request. Please rephrase it or try asking for help.',
+        message: t('Sorry, I could not understand your request. Please rephrase it or try asking for help.', 'Îmi pare rău, nu am înțeles cererea ta. Te rog reformulează sau cere ajutor.'),
         filters: {},
         links: [],
       });
@@ -190,7 +208,7 @@ exports.handleChat = async (req, res) => {
     if (flats.length === 0) {
       return res.status(200).json({
         status: 'success',
-        message: 'No flats matched your search criteria.',
+        message: t('No flats matched your search criteria.', 'Niciun apartament nu corespunde criteriilor tale.'),
         filters: cleaned,
         links: [],
       });
@@ -209,7 +227,7 @@ exports.handleChat = async (req, res) => {
     logger.error(`ChatBot error: ${error.message}`);
     return res.status(500).json({
       status: 'failed',
-      message: 'An error occurred while processing your request.',
+      message: t('An error occurred while processing your request.', 'A apărut o eroare la procesarea cererii.'),
     });
   }
 };

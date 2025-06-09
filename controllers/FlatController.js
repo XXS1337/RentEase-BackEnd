@@ -83,8 +83,13 @@ exports.getAllFlats = async (req, res) => {
           $gte: Number(min),
           $lte: Number(max),
         };
-      } else if (['city', 'title', 'address'].includes(key)) {
-        // Partial + case-insensitive text match
+      } else if (key === 'city') {
+        // Handle flexible city match (e.g., Alba-Iulia vs Alba Iulia)
+        // Flexible matching for city names, allowing space or dash (e.g., "Alba Iulia" or "Alba-Iulia")
+        const cityRegex = value.replace(/[-\s]+/g, '[-\\s]?');
+        filter[key] = { $regex: cityRegex, $options: 'i' };
+      } else if (['title', 'address'].includes(key)) {
+        // Case-insensitive partial text match for title and address
         filter[key] = { $regex: value, $options: 'i' };
       } else {
         // Convert 'true'/'false' strings to booleans for fields like hasAC
